@@ -6,9 +6,27 @@
     <title>Яндекс Карты - Текущее местоположение и предупреждения о ямах</title>
     <script src="https://api-maps.yandex.ru/2.1/?apikey=c19294ad-2f6f-4408-b98a-0d12297e7869&lang=ru_RU" type="text/javascript"></script>
     <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
+        #container {
+            width: calc(100% - 26px);
+            height: calc(100% - 26px);
+            padding: 13px;
+            box-sizing: border-box;
+            border: 5px solid green; /* Зелёная рамка по умолчанию */
+            border-radius: 10px;
+            transition: border-color 0.3s ease-in-out;
+        }
         #map {
             width: 100%;
-            height: 100vh;
+            height: 100%;
         }
         .alert {
             position: fixed;
@@ -24,8 +42,13 @@
     </style>
 </head>
 <body>
-    <div id="map"></div>
+    <div id="container">
+        <div id="map"></div>
+    </div>
     <div id="alert" class="alert">Внимание! Яма впереди!</div>
+
+    <!-- Аудио файл -->
+    <audio id="potholeAudio" src="https://www.soundjay.com/button/beep-07.wav" preload="auto"></audio>
 
     <script>
         // Координаты ям
@@ -36,10 +59,11 @@
         ];
 
         // Радиус предупреждения (в метрах)
-        const alertRadius = 100;
+        const alertRadius = 300;
 
         let userPosition = null;
         let alertShown = false;
+        let audioPlaying = false;
 
         ymaps.ready(() => {
             const map = new ymaps.Map('map', {
@@ -78,14 +102,23 @@
 
             // Функция для проверки расстояния до ям
             function checkProximity(coords) {
+                let isNearPothole = false;
                 potholes.forEach(pothole => {
                     const distance = ymaps.coordSystem.geo.getDistance(coords, [pothole.lat, pothole.lon]);
-                    if (distance <= alertRadius && !alertShown) {
-                        showWarning();
-                    } else if (distance > alertRadius && alertShown) {
-                        hideWarning();
+                    if (distance <= alertRadius) {
+                        isNearPothole = true;
                     }
                 });
+
+                if (isNearPothole && !alertShown) {
+                    showWarning();
+                    playAudio();
+                    startBlinkingBorder();
+                } else if (!isNearPothole && alertShown) {
+                    hideWarning();
+                    stopAudio();
+                    stopBlinkingBorder();
+                }
             }
 
             // Функция для отображения предупреждения
@@ -99,6 +132,50 @@
                 document.getElementById('alert').style.display = 'none';
                 alertShown = false;
             }
+
+            // Функция для воспроизведения аудио
+            function playAudio() {
+                const audio = document.getElementById('potholeAudio');
+                if (!audioPlaying) {
+                    audio.play();
+                    audioPlaying = true;
+                }
+            }
+
+            // Функция для остановки аудио
+            function stopAudio() {
+                const audio = document.getElementById('potholeAudio');
+                if (audioPlaying) {
+                    audio.pause();
+                    audio.currentTime = 0; // Сброс позиции воспроизведения
+                    audioPlaying = false;
+                }
+            }
+
+            // Функция для мигания красной рамки
+            function startBlinkingBorder() {
+                const container = document.getElementById('container');
+                container.style.borderColor = 'red';
+                container.style.animation = 'blink 1s infinite';
+            }
+
+            // Функция для остановки мигания рамки
+            function stopBlinkingBorder() {
+                const container = document.getElementById('container');
+                container.style.borderColor = 'green';
+                container.style.animation = 'none';
+            }
+
+            // CSS анимация для мигания рамки
+            const styleSheet = document.createElement('style');
+            styleSheet.innerHTML = `
+                @keyframes blink {
+                    0% { border-color: red; }
+                    50% { border-color: transparent; }
+                    100% { border-color: red; }
+                }
+            `;
+            document.head.appendChild(styleSheet);
 
             // Получение текущего местоположения
             navigator.geolocation.watchPosition(updatePosition, (error) => {
